@@ -51,7 +51,7 @@ catch
 end
 
 %% Write protocol information to excel file
-QC.write_prot(cal_prot,vent_prot,diff_prot,gx_prot,participant_folder);
+%QC.write_prot(cal_prot,vent_prot,diff_prot,gx_prot,participant_folder);
 
 %% Reconstruct Images
 %Ventilation
@@ -142,7 +142,7 @@ try
     mask = Seg.docker_segment(abs(anat));
 catch
     disp('Failed to generate Mask');
-    [~,mask] = erode_dilate(I_Gas_Sharp,1,8); 
+    [~,mask] = ImTools.erode_dilate(I_Gas_Sharp,1,8); 
 end
 
 %% Separate Membrane and RBC
