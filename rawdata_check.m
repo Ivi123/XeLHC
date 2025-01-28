@@ -55,6 +55,8 @@ end
 
 %% Reconstruct Images
 %Ventilation
+%Recon for Iowa is bad for vent and diff, but at least allows an estimate
+%of SNR
 try
     [I_Vent,K_Vent] = Reconstruct.gre_recon(mrd_files.vent{1});
 catch
@@ -161,9 +163,12 @@ catch
     SNR_RBC = -1;
 end
 %% Write out SNR to excel File
-SNR = {Cal_SNR,SNR_Vent,SNR_Diff(1),SNR_Diff(2),SNR_Gas_Sharp,SNR_Gas_Broad,SNR_Dissolved,SNR_Mem,SNR_RBC};
-QC.write_snr(SNR,participant_folder);
-
+SNR = {Cal_SNR(1),Cal_SNR(2),Cal_SNR(3),SNR_Vent,SNR_Diff(1),SNR_Diff(2),SNR_Gas_Sharp,SNR_Gas_Broad,SNR_Dissolved,SNR_Mem,SNR_RBC};
+try
+    QC.write_snr(SNR,participant_folder);
+catch
+    disp('SNR not written')
+end
 %% Write out all figures to a QC folder
 QA_fold = fullfile(participant_folder,'QA_Output');
 if ~isfolder(QA_fold)

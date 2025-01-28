@@ -6,6 +6,7 @@ end
 
 GX_Version = '20240213_V1.0';
 
+
 %% Read Files
 mrd_files = ReadData.get_mrd(participant_folder);
 
@@ -14,20 +15,48 @@ folders = struct2cell(folders);
 getnames = folders(1,:);
 myfolderind = find(contains(getnames,'sub-'));
 bidsfolder = getnames{myfolderind};
+dset = ismrmrd.Dataset(mrd_files.dixon{1},'dataset');
+hdr = ismrmrd.xml.deserialize(dset.readxml);
 
 %% Reconstruct Images
 % Gas and Dissolved - don't need to write nifti
 [I_Gas_Sharp,I_Gas_Broad,I_Dissolved,~,~] = Reconstruct.gx_recon(mrd_files.dixon{1},0,true);
-I_Gas_Sharp = I_Gas_Sharp(:,:,:,1);
-I_Gas_Broad = I_Gas_Broad(:,:,:,1);
-I_Dissolved = I_Dissolved(:,:,:,1);
-% 
+if contains(participant_folder,'CABA072')
+    I_Gas_Sharp = I_Gas_Sharp(:,:,:,1);
+    I_Dissolved = I_Gas_Broad(:,:,:,2);
+    I_Gas_Broad = I_Gas_Broad(:,:,:,1);
+elseif contains(participant_folder,'CACB054')
+    I_Gas_Sharp = I_Dissolved(:,:,:,1);
+    I_DissolvedA = I_Gas_Broad(:,:,:,1);
+    I_Gas_Broad = I_Dissolved(:,:,:,1);
+    I_Dissolved = I_DissolvedA;
+else
+    I_Gas_Sharp = I_Gas_Sharp(:,:,:,1);
+    I_Gas_Broad = I_Gas_Broad(:,:,:,1);
+    I_Dissolved = I_Dissolved(:,:,:,1);
+end
+    % 
+
+if contains(hdr.acquisitionSystemInformation.institutionName,'Iowa')
+    I_Gas_Sharp = I_Gas_Sharp;
+    I_Gas_Broad = I_Gas_Broad;
+    %I_Dissolved = flip(flip(I_Dissolved),3);
+end
 
 if isempty(mrd_files.ute)
-    anat = DICOM_Load;
+    anat = ImTools.DICOM_Load();
     anat = imresize3(anat,[64 64 64]);
+    anat = flip(anat);%figure;montage(test/max(abs(test(:))))
 else
-    [anat,~] = Reconstruct.gxanat_recon(mrd_files.ute{1},true);
+    try
+        [anat,~] = Reconstruct.gxanat_recon(mrd_files.ute{1},true);
+    catch
+        anat = zeros(size(I_Gas_Sharp));
+    end
+end
+
+if size(anat,1) ~= 64
+    anat = imresize3(anat,[64 64 64]);
 end
 
 %% Mask Anatomic Image
@@ -74,16 +103,27 @@ try
 catch
     TE = hdr.sequenceParameters.TE(1);
 end
-FOV = hdr.encoding.encodedSpace.fieldOfView_mm.z;
-
+try
+    FOV = hdr.encoding.encodedSpace.fieldOfView_mm.z;
+catch
+    FOV = hdr.encoding.reconSpace.fieldOfView_mm.z;
+end
 %% We can get Lung Volume here:
 lung_vol = nnz(double(mask))*((FOV/size(I_Gas_Broad,1)).^3)*1e-6;
 %%TODO: Recon and Masking done. Now run analysis and bin.
 %% Analyze Calibration:
 [R2M,~,T2Star] = Reconstruct.analyze_cal(mrd_files.cal{1});
+%CAQA069 has a bad calibration file, so get R2M from Post-spectra
+if contains(participant_folder,'CAQA069')
+    [R2M,T2Star] = Reconstruct.analyze_post_cal(mrd_files.dixon{1});
+end
 
 %% Separate RBC and Membrane
-[mem,rbc] = Reconstruct.dixon_sep(I_Dissolved(:,:,:,1),R2M,I_Gas_Broad(:,:,:,1),logical(mask));
+if contains(hdr.acquisitionSystemInformation.institutionName,'Iowa')
+    [mem,rbc] = Reconstruct.dixon_sep(I_Dissolved(:,:,:,1),-R2M,I_Gas_Broad(:,:,:,1),logical(mask));
+else
+    [mem,rbc] = Reconstruct.dixon_sep(I_Dissolved(:,:,:,1),R2M,I_Gas_Broad(:,:,:,1),logical(mask));
+end
 
 %% Write mem and RBC images:
 writemem = ReadData.mat2canon(mem);
@@ -217,7 +257,7 @@ R2G = mean(rbc2gas(vent_mask==1));
 M2G = mean(mem2gas(vent_mask==1));
 
 [Data_Path,Participant,~] = fileparts(participant_folder);
-sub_ind = strfind(Participant,'CAQA');
+sub_ind = strfind(Participant,'CA');
 Participant = Participant(sub_ind:end);
 
 if ~isfolder(fullfile(Data_Path,'QC'))
